@@ -60,7 +60,9 @@ jobs:
       - name: Generate build provenance attestation
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
         with:
-          subject-path: valkey-${{ matrix.target.version }}/dist/valkey-${{ matrix.target.version }}-darwin-arm64.tar.gz
+          subject-path: |
+            valkey-${{ matrix.target.version }}/dist/valkey-${{ matrix.target.version }}-darwin-arm64.tar.gz
+            valkey-${{ matrix.target.version }}/dist/valkey-${{ matrix.target.version }}-darwin-arm64-openssl.tar.gz
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
