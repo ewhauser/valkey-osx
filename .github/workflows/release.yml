@@ -9,16 +9,24 @@ on:
         description: 'Specific Valkey version (e.g. 8.1.6). Blank = auto-discover latest stable.'
         required: false
 
-permissions:
-  contents: write
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event.inputs.version || 'auto' }}
+  cancel-in-progress: false
 
 jobs:
   discover:
+    name: Discover upstream version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read       # checkout this repo
     outputs:
-      versions: ${{ steps.f.outputs.versions }}
+      targets: ${{ steps.f.outputs.targets }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - id: f
         env:
           GH_TOKEN: ${{ github.token }}
@@ -27,18 +35,36 @@ jobs:
         run: ./scripts/discover.sh
 
   build:
+    name: Build & release
     needs: discover
-    if: needs.discover.outputs.versions != '[]'
+    if: needs.discover.outputs.targets != '[]'
     runs-on: macos-15
+    permissions:
+      contents: write      # create the GitHub release
+      id-token: write      # OIDC token for Sigstore-backed attestation
+      attestations: write  # write the build provenance attestation
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        version: ${{ fromJSON(needs.discover.outputs.versions) }}
+        target: ${{ fromJSON(needs.discover.outputs.targets) }}
     steps:
-      - uses: actions/checkout@v4
-      - run: ./scripts/build.sh "${{ matrix.version }}"
-      - env:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build
+        env:
+          VERSION: ${{ matrix.target.version }}
+          SHA: ${{ matrix.target.sha }}
+        run: ./scripts/build.sh "$VERSION" "$SHA"
+      - name: Generate build provenance attestation
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+        with:
+          subject-path: valkey-${{ matrix.target.version }}/dist/valkey-${{ matrix.target.version }}-darwin-arm64.tar.gz
+      - name: Release
+        env:
           GH_TOKEN: ${{ github.token }}
           OUR_REPO: ${{ github.repository }}
-        run: ./scripts/release.sh "${{ matrix.version }}"
+          VERSION: ${{ matrix.target.version }}
+          SHA: ${{ matrix.target.sha }}
+        run: ./scripts/release.sh "$VERSION" "$SHA"
