@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Specific Valkey version (e.g. 8.1.6). Blank = auto-discover latest stable.'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.f.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+          OUR_REPO: ${{ github.repository }}
+        run: ./scripts/discover.sh
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.versions != '[]'
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        version: ${{ fromJSON(needs.discover.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/build.sh "${{ matrix.version }}"
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          OUR_REPO: ${{ github.repository }}
+        run: ./scripts/release.sh "${{ matrix.version }}"
