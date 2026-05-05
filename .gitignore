@@ -1,4 +1,5 @@
 dist/
 *.tar.gz
 *.tar.gz.sha256
-valkey-[0-9]*/
+*.source.json
+valkey-*/
